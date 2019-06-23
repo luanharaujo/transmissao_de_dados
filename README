@@ -1,0 +1,27 @@
+Em Linux não é necessário instalar nenhuma biblioteca para utilização deste código.
+Compilação:
+
+gcc proxy.c -o proxy
+
+Para rodar:
+
+./proxy
+
+Para utilizar junto a um navegador o proxy do navegador deve ser configurado manualmente para o endereço 127.0.0.1 na aporta 8080.
+Caso o programa seja encerrado de forma forçada provavelmente a porta 8080 ficara ocupada por um tempo sendo necessário esperar o time out do arquivo que no sistema que utilizei para fazer os testes leva em torno de 60 segundos, o monitoramento do uso da porta pode ser feito através do seguinte comando:
+
+netstat -na | grep 8080
+
+Apesar da funcionalidade de cache ter sido implementada e funcionar corretamente ela deixa a conexão muito lenta, sendo assim foi desabilitada por padrão, caso seja de interesse rodar com o cache ativo basta rodar com a chave -c no final, da seguinte formar:
+
+./proxy -c
+
+Os arquivos whitelist e blacklist devem ser preenchidos com os urls sem o "http://" e sem a "/" no final, separados por quebras de linhas.
+
+Exemplo errado:
+http://www.unb.br/
+
+Exemplo correto:
+www.unb.br 
+
+O arquivo deny_terms também deve ser preenchido com os termos separados por quebra de linha.
