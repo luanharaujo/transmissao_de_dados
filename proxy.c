@@ -41,14 +41,15 @@
 //declarações das funções
 //************************
 int proxy(int sockfd, int cache);
-int regras(char* requisicao);
+int regras(char* url_req);
 int verifica_cache(char* requisicao, char* identificador);
 int ler_requisicao(char* requisicao, int sockfd, char * nome_host);
 int conecta_servidor(char* nome_host);
 void enviar_requisicao(int sockfd, char * requisicao, int tam_req);
-void repassar_objetos(int sockfd_server, int sockfd_navegador);
+void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra);
 void criar_cache(int sockfd,int numero_cache, char* identificador);
 void cache2navegador(int numero_cache, int sockfd_navegador);
+void acesso_negado(int sockfd_navegador);
 
 //************************
 //			MAIN
@@ -123,9 +124,40 @@ int main(int argc, char const *argv[])
 //função que ferifica a lista preta e a lista branca
 //retorna 1 caso o site esteja na whitelist, -1 caso
 //esteja na blacklist e 0 caso não esteja em nenhuma das listas
-int regras(char* requisicao)
+int regras(char* url_req)
 {
-	return (WHITELIST);
+	FILE* fp;
+	char url[300];
+	
+	//verificando se o url esta na whitelist
+	fp = fopen("whitelist","r");
+	while(fscanf(fp,"%s",url)!=EOF)
+	{
+		if(strcmp(url,url_req)==0)
+		{
+			fclose(fp);
+			if(DEBUG) printf("Ta na whitelist\n");
+			return(WHITELIST);		
+		}
+	}
+	fclose(fp);
+	
+	//verificando se o url esta na blacklist
+	fp = fopen("blacklist","r");
+	while(fscanf(fp,"%s",url)!=EOF)
+	{
+		if(strcmp(url,url_req)==0)
+		{
+			fclose(fp);
+			if(DEBUG) printf("Ta na blacklist\n");
+			return(BLACKLIST);		
+		}
+	}
+	fclose(fp);
+	
+	if(DEBUG) printf("Não consta em nenhuma lista\n");
+
+	return (NO_INFO);
 }
 
 //verifica se a pagina já encontrasse no cache
@@ -240,7 +272,7 @@ int proxy(int socket_cliente, int cache)
 	tam_req = ler_requisicao(requisicao, socket_cliente, nome_host);
 	if(DEBUG) printf("Nova requisição recebina: %s\n", nome_host);
 	//log();
-	switch(regras(requisicao)) 
+	switch(regras(nome_host)) 
 	{
 		case WHITELIST :
 			if(cache)
@@ -276,15 +308,51 @@ int proxy(int socket_cliente, int cache)
 				//envia a requisição para o servidor
 				enviar_requisicao(socket_servidor, requisicao, tam_req);
 				//passar mensagem direto do servidor para o navegador
-				repassar_objetos(socket_servidor, socket_cliente);
+				repassar_objetos(socket_servidor, socket_cliente,0);
 			}
 		break;
 		case BLACKLIST :
 			//gerar entrada no log
 			//enviar mensagem de bloqueio ao navegador
+			acesso_negado(socket_cliente);
 		break;
 		case NO_INFO :
 			//verificar lista de termos proibidos
+			if(cache)
+				{
+					//verificando se a resposta para esta requisição já esta no cache
+					numero_cache = verifica_cache(requisicao,identificador_requisicao);
+					if(DEBUG) printf("\nNumero cache: %d\n", numero_cache);
+					if(numero_cache < 0)//caso ainda não esteja no cache
+					{
+						//criar cache
+						numero_cache *= -1;//tornarndo o novo numero de cache positivo
+
+						//conecta no servidor
+						socket_servidor = conecta_servidor(nome_host);
+						//envia a requisição para o servidor
+						enviar_requisicao(socket_servidor, requisicao, tam_req);
+						//recebe o objeto e guarda em um cache
+						criar_cache(socket_servidor,numero_cache, identificador_requisicao);
+						//passa o conteudo do cache para o navegardor
+						cache2navegador(numero_cache, socket_cliente);
+					}
+					else
+					{
+						//repassar do cache
+						if(DEBUG) printf("CACHE DESTA REQUISICAO EXISTE\n");
+						cache2navegador(numero_cache, socket_cliente);
+					}
+				}
+				else//caso o programa esteja rodando sem cache
+				{
+					//conecta no servidor
+					socket_servidor = conecta_servidor(nome_host);
+					//envia a requisição para o servidor
+					enviar_requisicao(socket_servidor, requisicao, tam_req);
+					//passar mensagem direto do servidor para o navegador
+					repassar_objetos(socket_servidor, socket_cliente,1);
+				}
 		break;
 	}
 	if(DEBUG) printf("Tratamento da requisição encerrado: %s\n", nome_host);
@@ -335,22 +403,66 @@ int conecta_servidor(char* host_name)
 //função que envia requisição para o servidor
 void enviar_requisicao(int sockfd, char *requisicao, int tam_req)
 {
-	
 	write(sockfd, requisicao, tam_req);
 	
 	return;
 }
 
-//legace: usada antes da implementação do cache
 //função que repassa objeto do servidor para o navegador
-void repassar_objetos(int sockfd_server, int sockfd_navegador)
+void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra)
 {
 	char temp;
+	char palavra[TAM_MAX];
+	char palavra_modificada[TAM_MAX];
+	int i, j;
+	ssize_t aux;
+	FILE *fp;
+	char negados[1000][100];
+	int n_termos;
 
-	while(read(sockfd_server,&temp,1)>0){
-		//if(DEBUG) printf("%c", temp);
-		write(sockfd_navegador,&temp,sizeof(temp));	
+	bzero(negados,sizeof(negados));
+
+	if(filtra)
+	{
+		//carregando termos proibidos
+		fp = fopen("deny_terms","r");
+		n_termos = 0;
+		while(fscanf(fp,"%s",negados[n_termos++])>0){}
+		n_termos--;
 	}
+	
+	//passando o pacote para o navegador palavra por palavra para permitir 
+	//a analisa dos deny_terms
+	do
+	{
+		//lendo cada palavra
+		i = 0;
+		while((aux = read(sockfd_server,&palavra[i],1))>0 && palavra[i]!=' '){
+			i++;//lendo cada letra
+		}
+		if(aux) {//acressentando o espaço na lalavra caso não seja o fim do arquivo
+			i++;	
+		}
+		palavra[i] = '\0';
+		if(filtra)//caso o filtro esteja ablitado
+		{
+			strcpy(palavra_modificada,palavra);//copiando a palavra para remover o espaço para facilitar acompração
+			palavra_modificada[strlen(palavra_modificada)-1] = '\0';//removendo o espaço
+			for(j = 0; j< n_termos; j++)//percorrendo a lista de termos proibidos
+			{
+				if(strcmp(palavra_modificada,negados[j])==0)
+				{
+					//caso encontrado termo proibido enviar a pagina de conexão negada e finalizar conexão
+					if(DEBUG) printf("PALAVRA PROIBIDA ENCONTRADA: %s\n", palavra_modificada);
+					acesso_negado(sockfd_navegador);
+					return;
+				}
+			}
+		}
+		//printf("%s\n", palavra);
+		write(sockfd_navegador,palavra,i);
+	}
+	while(aux>0);//repetir até o fim do arquivo
 	
 	return;
 }
@@ -409,5 +521,24 @@ void criar_cache(int sockfd,int numero_cache, char *identificador)
 
 	if(DEBUG) printf("Arquivo cache criado!\n");
 	
+	return;
+}
+
+//funcao que envia a mensagem de acesso negado apra o navegador
+void acesso_negado(int sockfd_navegador)
+{
+	FILE *fp;
+	char temp;
+
+	fp = fopen("acesso_negado.html","r");
+
+	while(fscanf(fp,"%c",&temp)>0){
+		//if(DEBUG) printf("%c", temp);
+		write(sockfd_navegador,&temp,sizeof(temp));	
+	}
+	
+	//fechando o arquivo
+	fclose(fp);
+
 	return;
 }
