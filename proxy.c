@@ -11,7 +11,11 @@
 *	códigos do livro "Unix Network Programing" 
 *	do "Richard Stevens" e os exemplos dos manuais 
 *	do linux/unix
-*
+*	
+*	Este código foi feito com o intuito de aprofuntar meus conhecimentos
+*	em redes de computures, assim não contempla todas as funcionalidades 
+*	de um proxy comercial e há espaço para melhorias, use o código como 
+*	desejar [=	
 */
 //************************
 //Inclusões dos cabeçalhos
@@ -46,10 +50,10 @@ int verifica_cache(char* requisicao, char* identificador);
 int ler_requisicao(char* requisicao, int sockfd, char * nome_host);
 int conecta_servidor(char* nome_host);
 void enviar_requisicao(int sockfd, char * requisicao, int tam_req);
-void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra);
+void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra, char * requisicao);
 void criar_cache(int sockfd,int numero_cache, char* identificador);
 void cache2navegador(int numero_cache, int sockfd_navegador);
-void acesso_negado(int sockfd_navegador);
+void acesso_negado(int sockfd_navegador, char *requisicao);
 
 //************************
 //			MAIN
@@ -262,6 +266,7 @@ int proxy(int socket_cliente, int cache)
 	static char nome_host[300];
 	static int numero_cache;
 	static char identificador_requisicao[300];
+	FILE *fp;
 
 	//zerado todas as strings
 	bzero(objeto,sizeof(objeto));
@@ -289,6 +294,12 @@ int proxy(int socket_cliente, int cache)
 					socket_servidor = conecta_servidor(nome_host);
 					//envia a requisição para o servidor
 					enviar_requisicao(socket_servidor, requisicao, tam_req);
+					//gerando log
+					fp = fopen("log","a+");
+					fprintf(fp, "Requisição Recebida:\n");
+					fprintf(fp, "%s", requisicao);
+					fprintf(fp, "Encaminhamento autorizado\n\n");
+					fclose(fp);
 					//recebe o objeto e guarda em um cache
 					criar_cache(socket_servidor,numero_cache, identificador_requisicao);
 					//passa o conteudo do cache para o navegardor
@@ -307,14 +318,19 @@ int proxy(int socket_cliente, int cache)
 				socket_servidor = conecta_servidor(nome_host);
 				//envia a requisição para o servidor
 				enviar_requisicao(socket_servidor, requisicao, tam_req);
+				//gerando log
+				fp = fopen("log","a+");
+				fprintf(fp, "Requisição Recebida:\n");
+				fprintf(fp, "%s", requisicao);
+				fprintf(fp, "Encaminhamento autorizado\n\n");
+				fclose(fp);
 				//passar mensagem direto do servidor para o navegador
-				repassar_objetos(socket_servidor, socket_cliente,0);
+				repassar_objetos(socket_servidor, socket_cliente,0, requisicao);
 			}
 		break;
 		case BLACKLIST :
-			//gerar entrada no log
 			//enviar mensagem de bloqueio ao navegador
-			acesso_negado(socket_cliente);
+			acesso_negado(socket_cliente, requisicao);
 		break;
 		case NO_INFO :
 			//verificar lista de termos proibidos
@@ -351,7 +367,7 @@ int proxy(int socket_cliente, int cache)
 					//envia a requisição para o servidor
 					enviar_requisicao(socket_servidor, requisicao, tam_req);
 					//passar mensagem direto do servidor para o navegador
-					repassar_objetos(socket_servidor, socket_cliente,1);
+					repassar_objetos(socket_servidor, socket_cliente,1, requisicao);
 				}
 		break;
 	}
@@ -409,7 +425,7 @@ void enviar_requisicao(int sockfd, char *requisicao, int tam_req)
 }
 
 //função que repassa objeto do servidor para o navegador
-void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra)
+void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra, char * requisicao)
 {
 	char temp;
 	char palavra[TAM_MAX];
@@ -454,7 +470,7 @@ void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra)
 				{
 					//caso encontrado termo proibido enviar a pagina de conexão negada e finalizar conexão
 					if(DEBUG) printf("PALAVRA PROIBIDA ENCONTRADA: %s\n", palavra_modificada);
-					acesso_negado(sockfd_navegador);
+					acesso_negado(sockfd_navegador, requisicao);
 					return;
 				}
 			}
@@ -464,6 +480,15 @@ void repassar_objetos(int sockfd_server, int sockfd_navegador, int filtra)
 	}
 	while(aux>0);//repetir até o fim do arquivo
 	
+	if(filtra)
+	{
+		fp = fopen("log","a+");
+		fprintf(fp, "Requisição Recebida:\n");
+		fprintf(fp, "%s", requisicao);
+		fprintf(fp, "Encaminhamento autorizado\n\n");
+		fclose(fp);
+	}
+
 	return;
 }
 
@@ -525,10 +550,17 @@ void criar_cache(int sockfd,int numero_cache, char *identificador)
 }
 
 //funcao que envia a mensagem de acesso negado apra o navegador
-void acesso_negado(int sockfd_navegador)
+void acesso_negado(int sockfd_navegador, char *requisicao)
 {
 	FILE *fp;
 	char temp;
+
+	//gerando log
+	fp = fopen("log","a+");
+	fprintf(fp, "Requisição Recebida:\n");
+	fprintf(fp, "%s", requisicao);
+	fprintf(fp, "Encaminhamento bloqueado\n\n");
+	fclose(fp);
 
 	fp = fopen("acesso_negado.html","r");
 

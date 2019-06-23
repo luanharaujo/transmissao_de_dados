@@ -6,17 +6,17 @@
 	[ ]definir "time out do cache"
 	[ ]politica de uso de memoria
 [x]whitelist
-	[ ]Log
+	[x]Log
 [x]blacklist
-	[ ]Log
+	[x]Log
 	[x]mensagem de erro (HTML!!!)
 [x]deny_terms
-	[ ]log
-	[ ]mensagem de erro (HTML!!!)
+	[x]log
+	[-]mensagem de erro (HTML!!!)
 [ ]time out
 	[ ]mensagem de erro para o navegador (HTML!!!)
 	[ ]log
-[ ]Verificar funcionalidade com diagrama da figura 4
+[x]Verificar funcionalidade com diagrama da figura 4
 [ ]criar arquivo README
 	[ ]netstat -na | grep 8080
 [ ]enviar versão final para o git
