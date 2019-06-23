@@ -2,7 +2,7 @@
 [x]Proxy funcional
 	[x]Tratar mutiplas requisições
 	[x]resolver DNS
-[ ]Cache
+[x]Cache
 	[ ]definir "time out do cache"
 	[ ]politica de uso de memoria
 [ ]whitelist
@@ -17,7 +17,8 @@
 	[ ]mensagem de erro para o navegador (HTML!!!)
 	[ ]log
 [ ]Verificar funcionalidade com diagrama da figura 4
-[ ]criar arquivo README 
+[ ]criar arquivo README
+	[ ]netstat -na | grep 8080
 [ ]enviar versão final para o git
 [ ]Adicionar monitor ao git
 [ ]Relatório
@@ -29,7 +30,7 @@
 		[ ]exemplos
 	[ ]arquitetura do sistema
 		[ ]explicação da arquitetura
-	[ ]documentação do código
+	[ ]documentação do código - git
 	[ ]Instruções para compilação/execução do código - (lembrar de expecificar a porta do proxy!)
 	[ ]Screenshots e explicação do funcionamento das funcionalidades implementadas
 	[ ]Possiveis melhorias futuras
